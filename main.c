@@ -148,10 +148,6 @@ int main() {
     exit(1);
   }
 
-
-  //ISWS XREIASTW MUTEXES EDW
-
-
 //Creating up the consumers / producers threads
   for (int i = 0; i < nOfConsumers; i++) {
     conArgs[i].Q = fifo;
@@ -238,6 +234,7 @@ void * producer(void * q) {
 
     //Calculate the driftTime
     double driftTime = previousInsert - nextInsert;
+    printf("Drift time : %d \n " , (int)driftTime);
     double sleepTime = T->period - driftTime;
     if(sleepTime > 0){
       usleep(sleepTime);
