@@ -73,6 +73,7 @@ int prodFinished = 0;
 int terminateConFlag = 0;
 struct timeval timeStamp;
 double tempTime = 0;
+int  jobsLostCounter=0;
 
 
 // The queue
@@ -106,16 +107,32 @@ typedef struct{
 } Timer;
 
 
+typedef struct{
+  int *buffer;
+  int index;
+} metrixArray;
+
+//Metrix structs to calculate for time measurements
+
+metrixArray * DriftTime ;
+metrixArray * ProdWaitTime;
+metrixArray * JobExecTime ;
+metrixArray * TotalQueueTime;
+
+
 // Queue functions
 queue * queueInit(void);
 void queueDelete(queue * q);
 void queueAdd(queue * q, workFunction in );
 void queueDel(queue * q, workFunction * out);
 
-Timer *timerInit(int period, int tasksToExecute, int startDelay , queue *queue, void *(*producer)(void *arg));
+Timer *timerInit(int period, int tasksToExecute, int startDelay , queue *queue, void *(*producer)(void *arg),void *(*errorFnc)());
 void timerStop(Timer *T);
 void start(Timer *T);
 void startat(Timer *T, int year, int month, int day, int hour, int minute, int second) ;
+void *error();
+metrixArray * metrixArrayInit(int n);
+void metrixArrayAdd(metrixArray *metr, int value);
 
 
 int main() {
@@ -140,15 +157,32 @@ switch (mode)
 {
   case 1:
   jobsToExecute = secondsToRun * (int)1e3 / period[0];
+  DriftTime =metrixArrayInit(jobsToExecute);
+  ProdWaitTime= metrixArrayInit(jobsToExecute);
+  JobExecTime =metrixArrayInit(jobsToExecute);
+  TotalQueueTime= metrixArrayInit(jobsToExecute);
+
   break;
   case 2:
   jobsToExecute = secondsToRun * (int)1e3 / period[1];
+  DriftTime =metrixArrayInit(jobsToExecute);
+  ProdWaitTime= metrixArrayInit(jobsToExecute);
+  JobExecTime =metrixArrayInit(jobsToExecute);
+  TotalQueueTime= metrixArrayInit(jobsToExecute);
   break;
   case 3:
   jobsToExecute = secondsToRun * (int)1e3 / period[2];
+  DriftTime =metrixArrayInit(jobsToExecute);
+  ProdWaitTime= metrixArrayInit(jobsToExecute);
+  JobExecTime =metrixArrayInit(jobsToExecute);
+  TotalQueueTime= metrixArrayInit(jobsToExecute);
   break;
   case 4:
   jobsToExecute = secondsToRun * (int)1e3 / period[0] +  secondsToRun * (int)1e3 / period[1] +  secondsToRun * (int)1e3 / period[2];
+  DriftTime =metrixArrayInit(jobsToExecute);
+  ProdWaitTime= metrixArrayInit(jobsToExecute);
+  JobExecTime =metrixArrayInit(jobsToExecute);
+  TotalQueueTime= metrixArrayInit(jobsToExecute);
   break;
 }
 
@@ -178,6 +212,9 @@ switch (mode)
     exit(1);
   }
 
+
+
+
 //Creating up the consumers / producers threads
   for (int i = 0; i < nOfConsumers; i++) {
     conArgs[i].Q = fifo;
@@ -190,24 +227,24 @@ switch (mode)
   switch(mode){
     case 1:
     T = (Timer *)malloc(sizeof(Timer));
-    T[0] = *timerInit(period[0],jobsToExecute , 0, fifo , producer);
+    T[0] = *timerInit(period[0],jobsToExecute , 0, fifo , producer, error);
     start(T);
     break;
     case 2:
     T = (Timer *)malloc(sizeof(Timer));
-    T[0] = *timerInit(period[1],jobsToExecute , 0, fifo , producer);
+    T[0] = *timerInit(period[1],jobsToExecute , 0, fifo , producer,error);
     start(T);
     break;
     case 3:
     T = (Timer *)malloc(sizeof(Timer));
-    T[0] = *timerInit(period[2],jobsToExecute , 0, fifo , producer);
+    T[0] = *timerInit(period[2],jobsToExecute , 0, fifo , producer,error);
     start(T);
     break;
     case 4:
     T = (Timer *)malloc(3 * sizeof(Timer));
-    T[0] = *timerInit(period[0],secondsToRun * (int)1e3 / period[0] , 0, fifo , producer);
-    T[1] = *timerInit(period[1],secondsToRun * (int)1e3 / period[1] , 0, fifo , producer);
-    T[2] = *timerInit(period[2],secondsToRun * (int)1e3 / period[2] , 0, fifo , producer);
+    T[0] = *timerInit(period[0],secondsToRun * (int)1e3 / period[0] , 0, fifo , producer,error);
+    T[1] = *timerInit(period[1],secondsToRun * (int)1e3 / period[1] , 0, fifo , producer,error);
+    T[2] = *timerInit(period[2],secondsToRun * (int)1e3 / period[2] , 0, fifo , producer,error);
     start((T+0));
     start((T+1));
     start((T+2));
@@ -248,7 +285,6 @@ void * producer(void * q) {
   double previousInsert , nextInsert ;
 
   sleep(T->startDelay);
-
   gettimeofday(&timeValue, NULL);
   previousInsert = 1e6* timeValue.tv_sec + timeValue.tv_usec;
   nextInsert = previousInsert;
@@ -260,6 +296,8 @@ void * producer(void * q) {
 
     while (fifo -> full) {
       printf("The queue is full \n");
+      //Error function execution
+      T->errorFnc;
       pthread_cond_wait(fifo -> notFull, fifo -> mut);
     }
     gettimeofday(&timeValue, NULL);
@@ -282,12 +320,14 @@ void * producer(void * q) {
 
     //Calculate the time taken for a producer to push a job to the queue
     int prodJobADD = (prodJobEnd.tv_sec-prodJobStart.tv_sec)*(int)1e6 + prodJobEnd.tv_usec-prodJobStart.tv_usec;
+    metrixArrayAdd(ProdWaitTime, prodJobADD);
     printf("Producer push waiting time : %d  \n " , prodJobADD);
     pthread_mutex_unlock(fifo -> mut);
     pthread_cond_signal(fifo -> notEmpty);
 
     //Calculate the driftTime
     double driftTime = previousInsert - nextInsert;
+    metrixArrayAdd(DriftTime,driftTime);
     printf("Drift time : %d \n " , (int)driftTime);
     double sleepTime = T->period - driftTime;
     if(sleepTime > 0){
@@ -355,6 +395,7 @@ void * consumer(void * q) {
     //Calculating the waiting time at the queue
     waitingTime= (leaveTime.tv_sec -(arrTime[fifo->head]).tv_sec) *1e6 + (leaveTime.tv_usec-(arrTime[fifo->head]).tv_usec) ;
     printf("The waiting time is : %d  \n " , waitingTime);
+    metrixArrayAdd(TotalQueueTime,waitingTime);
     queueDel(fifo, &wf);
     tempTime += waitingTime;
 
@@ -369,6 +410,7 @@ void * consumer(void * q) {
     pthread_mutex_lock(conArg->helperMut);
     int JobDur = (JobExecEnd.tv_sec-JobExecStart.tv_sec)*(int)1e6 + JobExecEnd.tv_usec-JobExecStart.tv_usec;
     printf("Execution time is  : %d  \n " , JobDur);
+    metrixArrayAdd(JobExecTime,JobDur);
     pthread_mutex_unlock(conArg->helperMut);
 
 
@@ -464,8 +506,6 @@ void * sinF(void * args) {
   for(int i = 0; i <nOfExec; i++){
   ret = sin(x * val);
 }
-  //   printf("The sine of %lf is %lf degrees \n", x, ret);
-
 }
 
 void * cosF(void * args) {
@@ -475,12 +515,11 @@ void * cosF(void * args) {
   for(int i = 0; i<nOfExec ; i++){
   ret = cos(x * val);
 }
-  //   printf("The cosine of %lf is %lf degrees \n", x, ret);
 
 }
 
 
-Timer *timerInit(int period, int tasksToExecute, int startDelay , queue *queue, void *(*producer)(void *arg)){
+Timer *timerInit(int period, int tasksToExecute, int startDelay , queue *queue, void *(*producer)(void *arg),void *(*errorFnc)()){
     printf("Initializing Timer\n");
     Timer *T = (Timer *) malloc( sizeof(Timer) );
     T->period = period;
@@ -488,6 +527,9 @@ Timer *timerInit(int period, int tasksToExecute, int startDelay , queue *queue, 
     T->startDelay = startDelay;
     T->Q = queue;
     T->producer = producer;
+    T->errorFnc = errorFnc;
+    T->startFnc = NULL;
+    T->userData = NULL;
 
     return T;
 }
@@ -508,4 +550,28 @@ void timerStop(Timer *T){
   free( T->stopFnc );
   free( T->errorFnc );
   free( T );
+}
+
+void *error() {
+    jobsLostCounter++;
+}
+
+metrixArray * metrixArrayInit(int n){
+  metrixArray *metr = (metrixArray *) malloc( sizeof(metrixArray) );
+  if( metr==NULL ) {
+    printf("Error at memory allocation \n");
+  }
+  metr->index = 0;
+  metr->buffer = (int *)malloc(sizeof(int)*n);
+  if(metr->buffer == NULL){
+    printf("Error at memory allocation \n");
+  }
+
+  return metr;
+}
+
+void metrixArrayAdd(metrixArray *metr, int value){
+
+  metr->buffer[metr->index] = value;
+  metr->index += 1;
 }
