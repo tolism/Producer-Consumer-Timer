@@ -19,6 +19,7 @@
 #include <sys/time.h>
 #include <math.h>
 
+
 // Defines for the queue and the prod/cons
 #define QUEUESIZE 2
 #define nOfProducers 1
@@ -28,9 +29,8 @@
 #define nOfExec 10
 #define PI 3.14159265
 
-#define PERIOD 1e5
-#define TIMERREPS 5000
 
+#define secondsToRun 3600
 
 
 // Thread functions decleration
@@ -120,6 +120,37 @@ void startat(Timer *T, int year, int month, int day, int hour, int minute, int s
 
 int main() {
 
+//Available timer's period in mseconds
+int period[3] = {1000, 100, 10};
+int mode = 0;
+printf("Timer Execution Options:\n");
+printf("1 - 1 sec period\n");
+printf("2 - 0.1 sec period\n");
+printf("3 - 0.01 sec period\n");
+printf("4 - All of the above\n");
+printf("Select Mode: ");
+scanf("%d", &mode);
+if (mode!=1 && mode!=2 && mode!=3 && mode!=4) {
+    printf("No such mode \n");
+    exit(0);
+}
+
+int jobsToExecute = 0;
+switch (mode)
+{
+  case 1:
+  jobsToExecute = secondsToRun * (int)1e3 / period[0];
+  break;
+  case 2:
+  jobsToExecute = secondsToRun * (int)1e3 / period[1];
+  break;
+  case 3:
+  jobsToExecute = secondsToRun * (int)1e3 / period[2];
+  break;
+  case 4:
+  jobsToExecute = secondsToRun * (int)1e3 / period[0] +  secondsToRun * (int)1e3 / period[1] +  secondsToRun * (int)1e3 / period[2];
+  break;
+}
 
   srand(time(NULL));
   queue * fifo;
@@ -140,10 +171,9 @@ int main() {
   conArgs = (tArg *) malloc( nOfConsumers * sizeof(tArg) );
 
   Timer *T;
-  T= (Timer *) malloc( nOfProducers * sizeof(Timer));
 
 
-  if(pro == NULL || con == NULL || proArgs == NULL || conArgs == NULL || T == NULL){
+  if(pro == NULL || con == NULL || proArgs == NULL || conArgs == NULL ){
     fprintf(stderr, "Error at memory initialization.\n");
     exit(1);
   }
@@ -156,11 +186,35 @@ int main() {
     pthread_create( &con[i], NULL, consumer, (void *)(conArgs + i));
   }
 
-  for (int i = 0; i < nOfProducers; i++) {
-    T[i] = *timerInit(PERIOD,TIMERREPS , 0, fifo , producer);
-    start((T+i));
 
+  switch(mode){
+    case 1:
+    T = (Timer *)malloc(sizeof(Timer));
+    T[0] = *timerInit(period[0],jobsToExecute , 0, fifo , producer);
+    start(T);
+    break;
+    case 2:
+    T = (Timer *)malloc(sizeof(Timer));
+    T[0] = *timerInit(period[1],jobsToExecute , 0, fifo , producer);
+    start(T);
+    break;
+    case 3:
+    T = (Timer *)malloc(sizeof(Timer));
+    T[0] = *timerInit(period[2],jobsToExecute , 0, fifo , producer);
+    start(T);
+    break;
+    case 4:
+    T = (Timer *)malloc(3 * sizeof(Timer));
+    T[0] = *timerInit(period[0],secondsToRun * (int)1e3 / period[0] , 0, fifo , producer);
+    T[1] = *timerInit(period[1],secondsToRun * (int)1e3 / period[1] , 0, fifo , producer);
+    T[2] = *timerInit(period[2],secondsToRun * (int)1e3 / period[2] , 0, fifo , producer);
+    start((T+0));
+    start((T+1));
+    start((T+2));
+
+    break;
   }
+
 
 //Waiting for the threads to join
   for (int i = 0; i < nOfProducers; i++) {
@@ -237,7 +291,7 @@ void * producer(void * q) {
     printf("Drift time : %d \n " , (int)driftTime);
     double sleepTime = T->period - driftTime;
     if(sleepTime > 0){
-      usleep(sleepTime);
+      usleep(sleepTime*(int)1e3);
       //printf("Drift time : %lf \n" , sleepTime);
     }
     else{
