@@ -1,7 +1,7 @@
 /*
  * FILE: prod-cons.c
- * THMMY, 8th semester, Real Time Embedded Systems: 1st assignment
- * Parallel implementation of producer - consumer problem
+ * THMMY, 8th semester, Real Time Embedded Systems: 2nd assignment
+ * Implementation of producer - consumer problem using timer
  * Author:
  *   Moustaklis Apostolos, 9127, amoustakl@auth.gr
  * Compile command with :
@@ -20,17 +20,15 @@
 #include <math.h>
 
 // Defines for the queue and the prod/cons
-#define QUEUESIZE 4
+#define QUEUESIZE 2
 #define nOfProducers 1
-#define nOfConsumers 4
+#define nOfConsumers 2
 #define nOfFunctions 5
 #define nOfArguments 16
 #define PI 3.14159265
 
 #define PERIOD 1e5
 #define TIMERREPS 5000
-
-
 
 
 
@@ -66,6 +64,7 @@ typedef struct {
 workFunction;
 
 struct timeval arrTime[QUEUESIZE];
+pthread_mutex_t *helperMut ;
 
 
 // Global flags/counters/times
@@ -87,6 +86,7 @@ queue;
 
 typedef struct{
   queue *Q;
+  pthread_mutex_t *helperMut;
 } tArg;
 
 
@@ -159,7 +159,7 @@ int main() {
 
   for (int i = 0; i < nOfProducers; i++) {
     T[i] = *timerInit(PERIOD,TIMERREPS , 0, fifo , producer);
-    start(T);
+    start((T+i));
 
   }
 
@@ -183,27 +183,27 @@ int main() {
 
 //Producer thread function
 void * producer(void * q) {
+
+
   queue * fifo;
   int i ,tid ;
   Timer *T = (Timer *)q;
   fifo = T->Q ;
   int randF, randAr;
-
   double totalDrift = 0;
-  struct timeval  timeValue ;
-
+  struct timeval  timeValue  , prodJobStart , prodJobEnd ;
   double previousInsert , nextInsert ;
+
+  sleep(T->startDelay);
 
   gettimeofday(&timeValue, NULL);
   previousInsert = 1e6* timeValue.tv_sec + timeValue.tv_usec;
   nextInsert = previousInsert;
 
 
-
-
-
   for (i = 0; i < T->tasksToExecute; i++) {
     pthread_mutex_lock(fifo -> mut);
+    gettimeofday(&prodJobStart, NULL);
 
     while (fifo -> full) {
       printf("The queue is full \n");
@@ -220,20 +220,28 @@ void * producer(void * q) {
     //Randomly choose an argument
     randAr = rand() % nOfArguments;
     wf.arg = & argu[randAr];
+
     //Getting the arrival time at the queue
+    gettimeofday(&(arrTime[(fifo->tail)]),NULL);
+    gettimeofday(&prodJobEnd, NULL);
 
     queueAdd(fifo, wf);
+
+    //Calculate the time taken for a producer to push a job to the queue
+    int prodJobADD = (prodJobEnd.tv_sec-prodJobStart.tv_sec)*(int)1e6 + prodJobEnd.tv_usec-prodJobStart.tv_usec;
+    printf("Producer push waiting time : %d  \n " , prodJobADD);
     pthread_mutex_unlock(fifo -> mut);
     pthread_cond_signal(fifo -> notEmpty);
 
+    //Calculate the driftTime
     double driftTime = previousInsert - nextInsert;
     double sleepTime = T->period - driftTime;
     if(sleepTime > 0){
       usleep(sleepTime);
-      printf("Drift time : %lf \n" , sleepTime);
+      //printf("Drift time : %lf \n" , sleepTime);
     }
     else{
-    printf("NO FUCKING SLEEP \n");
+    //printf("NO FUCKING SLEEP \n");
     }
     //Update time value
 
@@ -259,12 +267,14 @@ void * consumer(void * q) {
   queue * fifo;
   int i, d ;
 
-  double waitingTime ;
+
+  int waitingTime ;
+  struct timeval  JobExecStart, JobExecEnd;
 
   tArg *conArg;
   conArg = (tArg *)q ;
   fifo = conArg->Q;
-
+  
 
   while (1) {
 
@@ -286,13 +296,11 @@ void * consumer(void * q) {
     //Workfunction object to remove from the queue
     workFunction wf ;
     struct timeval leaveTime;
-    //Getting the leave time from the queuee
+    //Getting the leave time from the queueegettimeofday(&JobExecStart,NULL);
     gettimeofday(&leaveTime,NULL);
-
-
     //Calculating the waiting time at the queue
     waitingTime= (leaveTime.tv_sec -(arrTime[fifo->head]).tv_sec) *1e6 + (leaveTime.tv_usec-(arrTime[fifo->head]).tv_usec) ;
-    //printf("The waiting time is : %lf  \n " , waitingTime);
+    printf("The waiting time is : %d  \n " , waitingTime);
     queueDel(fifo, &wf);
     tempTime += waitingTime;
 
@@ -300,7 +308,15 @@ void * consumer(void * q) {
     pthread_mutex_unlock(fifo -> mut);
     pthread_cond_signal(fifo -> notFull);
     //Executing the work function outside the mutexes
+    gettimeofday(&JobExecStart,NULL);
     wf.work(wf.arg);
+    gettimeofday(&JobExecEnd,NULL);
+
+    // pthread_mutex_lock(conArg->helperMut);
+    // int JobDur = (JobExecEnd.tv_sec-JobExecStart.tv_sec)*(int)1e6 + JobExecEnd.tv_usec-JobExecStart.tv_usec;
+    // printf("Execution time is  : %d  \n " , JobDur);
+    // pthread_mutex_unlock(conArg->helperMut);
+    //
 
   }
 //  pthread_cond_signal (fifo->notEmpty);
