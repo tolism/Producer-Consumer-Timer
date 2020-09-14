@@ -23,8 +23,9 @@
 #define QUEUESIZE 2
 #define nOfProducers 1
 #define nOfConsumers 2
-#define nOfFunctions 5
+#define nOfFunctions 3
 #define nOfArguments 16
+#define nOfExec 10
 #define PI 3.14159265
 
 #define PERIOD 1e5
@@ -46,8 +47,8 @@ void * sinF(void * args);
 void * cosF(void * args);
 
 void * ( * functions[nOfFunctions])(void * x) = {
-  circleArea,
-  circleCirCumf,
+//  circleArea,
+//  circleCirCumf,
   expo,
   sinF,
   cosF
@@ -64,7 +65,7 @@ typedef struct {
 workFunction;
 
 struct timeval arrTime[QUEUESIZE];
-pthread_mutex_t *helperMut ;
+
 
 
 // Global flags/counters/times
@@ -154,6 +155,8 @@ int main() {
 //Creating up the consumers / producers threads
   for (int i = 0; i < nOfConsumers; i++) {
     conArgs[i].Q = fifo;
+    conArgs[i].helperMut = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
+    pthread_mutex_init(conArgs[i].helperMut, NULL);
     pthread_create( &con[i], NULL, consumer, (void *)(conArgs + i));
   }
 
@@ -274,7 +277,7 @@ void * consumer(void * q) {
   tArg *conArg;
   conArg = (tArg *)q ;
   fifo = conArg->Q;
-  
+
 
   while (1) {
 
@@ -312,11 +315,11 @@ void * consumer(void * q) {
     wf.work(wf.arg);
     gettimeofday(&JobExecEnd,NULL);
 
-    // pthread_mutex_lock(conArg->helperMut);
-    // int JobDur = (JobExecEnd.tv_sec-JobExecStart.tv_sec)*(int)1e6 + JobExecEnd.tv_usec-JobExecStart.tv_usec;
-    // printf("Execution time is  : %d  \n " , JobDur);
-    // pthread_mutex_unlock(conArg->helperMut);
-    //
+    pthread_mutex_lock(conArg->helperMut);
+    int JobDur = (JobExecEnd.tv_sec-JobExecStart.tv_sec)*(int)1e6 + JobExecEnd.tv_usec-JobExecStart.tv_usec;
+    printf("Execution time is  : %d  \n " , JobDur);
+    pthread_mutex_unlock(conArg->helperMut);
+
 
   }
 //  pthread_cond_signal (fifo->notEmpty);
@@ -379,23 +382,26 @@ void queueDel(queue * q, workFunction * out) {
   return;
 }
 
-// Work function implementations
-void * circleArea(void * args) {
-  double x = ( * (int * ) args);
-  double circleAr = PI * x * x;
-  //  printf("\nArea of circle is: %lf \n",circleAr );
-
-}
-
-void * circleCirCumf(void * args) {
-  double x = ( * (int * ) args);
-  double circleC = 2 * PI * x;
-  //     printf("\nCircumference of circle is: %lf \n",circleC);
-}
+// // Work function implementations
+// void * circleArea(void * args) {
+//   double x = ( * (int * ) args);
+//   double circleAr = PI * x * x;
+//   //  printf("\nArea of circle is: %lf \n",circleAr );
+//
+// }
+//
+// void * circleCirCumf(void * args) {
+//   double x = ( * (int * ) args);
+//   double circleC = 2 * PI * x;
+//   //     printf("\nCircumference of circle is: %lf \n",circleC);
+// }
 
 void * expo(void * args) {
   double x = ( * (int * ) args);
-  double result = exp(x / 180);
+  double result;
+  for(int i = 0 ; i < nOfExec; i++){
+  result = exp(x / 180);
+}
   //    printf("Exponential of %lf = %lf \n", x, result);
 
 }
@@ -404,7 +410,9 @@ void * sinF(void * args) {
   double x = * (int * ) args;
   double ret, val;
   val = PI / 180;
+  for(int i = 0; i <nOfExec; i++){
   ret = sin(x * val);
+}
   //   printf("The sine of %lf is %lf degrees \n", x, ret);
 
 }
@@ -413,7 +421,9 @@ void * cosF(void * args) {
   double x = * (int * ) args;
   double ret, val;
   val = PI / 180;
+  for(int i = 0; i<nOfExec ; i++){
   ret = cos(x * val);
+}
   //   printf("The cosine of %lf is %lf degrees \n", x, ret);
 
 }
