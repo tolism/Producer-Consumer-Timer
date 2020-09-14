@@ -30,7 +30,7 @@
 #define PI 3.14159265
 
 
-#define secondsToRun 3600
+#define secondsToRun 60
 
 
 // Thread functions decleration
@@ -262,8 +262,33 @@ switch (mode)
     pthread_join(con[i], NULL);
   }
 
-  //double averageTime = ((double) tempTime) / (nOfProducers * LOOP);
-  //printf("The average waiting time  is :  %lf \n", averageTime);
+
+  FILE *f1 = fopen("TimeInQueue.txt", "w");
+    for(int i=0; i<jobsToExecute; ++i){
+      fprintf(f1, "%d,", TotalQueueTime->buffer[i]);
+    }
+    fclose(f1);
+
+    FILE *f2 = fopen("DriftTime.txt", "w");
+      for(int i=0; i<jobsToExecute; ++i){
+        fprintf(f2, "%d,", DriftTime->buffer[i]);
+      }
+      fclose(f2);
+
+      FILE *f3 = fopen("JobExecTime.txt", "w");
+        for(int i=0; i<jobsToExecute; ++i){
+          fprintf(f3, "%d,", JobExecTime->buffer[i]);
+        }
+        fclose(f3);
+
+        FILE *f4 = fopen("ProdWaitTime.txt", "w");
+          for(int i=0; i<jobsToExecute; ++i){
+            fprintf(f4, "%d,", ProdWaitTime->buffer[i]);
+          }
+          fclose(f4);
+
+
+
 
   queueDelete(fifo);
   free(T);
