@@ -342,7 +342,7 @@ void * producer(void * q) {
     //Calculate the driftTime
     double driftTime = previousInsert - nextInsert;
     metrixArrayAdd(f2,driftTime);
-    printf("Drift time : %d \n " , (int)driftTime);
+    //printf("Drift time : %d \n " , (int)driftTime);
     double sleepTime = T->period - driftTime/(int)1e3;
     if(sleepTime > 0){
       usleep(sleepTime*(int)1e3);
