@@ -21,7 +21,7 @@
 
 
 // Defines for the queue and the prod/cons
-#define QUEUESIZE 2
+#define QUEUESIZE 5
 #define nOfProducers 1
 #define nOfConsumers 2
 #define nOfFunctions 3
@@ -30,7 +30,8 @@
 #define PI 3.14159265
 
 
-#define secondsToRun 60
+
+#define secondsToRun 10
 
 
 // Thread functions decleration
@@ -86,23 +87,24 @@ typedef struct {
 }
 queue;
 
+//Consumer Argument Struct
 typedef struct{
   queue *Q;
   pthread_mutex_t *helperMut;
 } tArg;
 
 
+//The timer struct
 typedef struct{
-    int period;
-    int tasksToExecute;
-    int startDelay;
-    void * (*startFnc) (void *);
-    void * (*stopFnc)  (void *);
-    void * (*timerFnc) (void *);
-    void * (*errorFnc) (void *);
+    int period; //Period of the timer
+    int tasksToExecute; //The number of tasks timer needs to execute
+    int startDelay; //A possible delay for the timer to start
+    void * (*startFnc) (void *); //Start function of Timer
+    void * (*stopFnc)  (void *); //Stop function of Timer
+    void * (*timerFnc) (void *); //Function the Timer will execute
+    void * (*errorFnc) (void *); //Error function
     void *userData;
     queue *Q;
-    void *(*producer)(void *arg);
     pthread_t tid;
 } Timer;
 
@@ -112,27 +114,25 @@ typedef struct{
   int index;
 } metrixArray;
 
-//Metrix structs to calculate for time measurements
+//Metrix files to calculate for time measurements
+FILE *f1;
+FILE *f2;
+FILE *f3;
+FILE *f4;
 
-metrixArray * DriftTime ;
-metrixArray * ProdWaitTime;
-metrixArray * JobExecTime ;
-metrixArray * TotalQueueTime;
 
-
-// Queue functions
+//Functions Decleration
 queue * queueInit(void);
 void queueDelete(queue * q);
 void queueAdd(queue * q, workFunction in );
 void queueDel(queue * q, workFunction * out);
-
-Timer *timerInit(int period, int tasksToExecute, int startDelay , queue *queue, void *(*producer)(void *arg),void *(*errorFnc)());
+Timer *timerInit(int period, int tasksToExecute, int startDelay , queue *queue, void *(*producer)(void *arg),void *(*errorFnc)(), void * (*timerFnc) (void *););
 void timerStop(Timer *T);
 void start(Timer *T);
-void startat(Timer *T, int year, int month, int day, int hour, int minute, int second) ;
+void startat(Timer *T, int year, int month, int day, int hour, int minute, int second);
 void *error();
 metrixArray * metrixArrayInit(int n);
-void metrixArrayAdd(metrixArray *metr, int value);
+void metrixArrayAdd(FILE *file_to_write , int value);
 
 
 int main() {
@@ -148,7 +148,8 @@ printf("4 - All of the above\n");
 printf("Select Mode: ");
 scanf("%d", &mode);
 if (mode!=1 && mode!=2 && mode!=3 && mode!=4) {
-    printf("No such mode \n");
+    printf("No such mode \n");// // Work function implementations
+
     exit(0);
 }
 
@@ -157,38 +158,31 @@ switch (mode)
 {
   case 1:
   jobsToExecute = secondsToRun * (int)1e3 / period[0];
-  DriftTime =metrixArrayInit(jobsToExecute);
-  ProdWaitTime= metrixArrayInit(jobsToExecute);
-  JobExecTime =metrixArrayInit(jobsToExecute);
-  TotalQueueTime= metrixArrayInit(jobsToExecute);
 
   break;
   case 2:
   jobsToExecute = secondsToRun * (int)1e3 / period[1];
-  DriftTime =metrixArrayInit(jobsToExecute);
-  ProdWaitTime= metrixArrayInit(jobsToExecute);
-  JobExecTime =metrixArrayInit(jobsToExecute);
-  TotalQueueTime= metrixArrayInit(jobsToExecute);
+
   break;
   case 3:
   jobsToExecute = secondsToRun * (int)1e3 / period[2];
-  DriftTime =metrixArrayInit(jobsToExecute);
-  ProdWaitTime= metrixArrayInit(jobsToExecute);
-  JobExecTime =metrixArrayInit(jobsToExecute);
-  TotalQueueTime= metrixArrayInit(jobsToExecute);
+
   break;
   case 4:
   jobsToExecute = secondsToRun * (int)1e3 / period[0] +  secondsToRun * (int)1e3 / period[1] +  secondsToRun * (int)1e3 / period[2];
-  DriftTime =metrixArrayInit(jobsToExecute);
-  ProdWaitTime= metrixArrayInit(jobsToExecute);
-  JobExecTime =metrixArrayInit(jobsToExecute);
-  TotalQueueTime= metrixArrayInit(jobsToExecute);
+
   break;
 }
 
   srand(time(NULL));
   queue * fifo;
   pthread_t *pro, *con;
+
+f1 = fopen("TimeInQueue.txt", "w");
+f2 = fopen("DriftTime.txt", "w");
+f3 = fopen("JobExecTime.txt", "w");
+f4 = fopen("ProdWaitTime.txt", "w");
+
 
 //Fifo Initialization
   fifo = queueInit();
@@ -200,51 +194,51 @@ switch (mode)
   pro = (pthread_t *) malloc( nOfProducers * sizeof(pthread_t) );
   con = (pthread_t *) malloc( nOfConsumers * sizeof(pthread_t) );
 
+
   tArg *proArgs, *conArgs;
   proArgs = (tArg *) malloc( nOfProducers * sizeof(tArg) );
   conArgs = (tArg *) malloc( nOfConsumers * sizeof(tArg) );
 
   Timer *T;
 
-
   if(pro == NULL || con == NULL || proArgs == NULL || conArgs == NULL ){
     fprintf(stderr, "Error at memory initialization.\n");
     exit(1);
   }
 
-
-
-
 //Creating up the consumers / producers threads
   for (int i = 0; i < nOfConsumers; i++) {
     conArgs[i].Q = fifo;
     conArgs[i].helperMut = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
+    // elegxos gia memory leak
     pthread_mutex_init(conArgs[i].helperMut, NULL);
     pthread_create( &con[i], NULL, consumer, (void *)(conArgs + i));
   }
-
-
+    int randF;
+    randF = rand() % nOfFunctions;
   switch(mode){
     case 1:
     T = (Timer *)malloc(sizeof(Timer));
-    T[0] = *timerInit(period[0],jobsToExecute , 0, fifo , producer, error);
+    T[0] = *timerInit(period[0],jobsToExecute , 0, fifo , producer, error , functions[randF] );
     start(T);
     break;
     case 2:
     T = (Timer *)malloc(sizeof(Timer));
-    T[0] = *timerInit(period[1],jobsToExecute , 0, fifo , producer,error);
+    T[0] = *timerInit(period[1],jobsToExecute , 0, fifo , producer,error , functions[randF]);
     start(T);
     break;
     case 3:
     T = (Timer *)malloc(sizeof(Timer));
-    T[0] = *timerInit(period[2],jobsToExecute , 0, fifo , producer,error);
+    T[0] = *timerInit(period[2],jobsToExecute , 0, fifo , producer,error, functions[randF]);
     start(T);
     break;
     case 4:
     T = (Timer *)malloc(3 * sizeof(Timer));
-    T[0] = *timerInit(period[0],secondsToRun * (int)1e3 / period[0] , 0, fifo , producer,error);
-    T[1] = *timerInit(period[1],secondsToRun * (int)1e3 / period[1] , 0, fifo , producer,error);
-    T[2] = *timerInit(period[2],secondsToRun * (int)1e3 / period[2] , 0, fifo , producer,error);
+    // elegxos gia memory leak
+
+    T[0] = *timerInit(period[0],secondsToRun * (int)1e3 / period[0] , 0, fifo , producer,error,functions[randF]);
+    T[1] = *timerInit(period[1],secondsToRun * (int)1e3 / period[1] , 0, fifo , producer,error,functions[randF]);
+    T[2] = *timerInit(period[2],secondsToRun * (int)1e3 / period[2] , 0, fifo , producer,error,functions[randF]);
     start((T+0));
     start((T+1));
     start((T+2));
@@ -262,36 +256,31 @@ switch (mode)
     pthread_join(con[i], NULL);
   }
 
+  switch(mode){
+    case 1:
+    timerStop(T);
+    break;
+    case 2:
+    timerStop(T);
+    break;
+    case 3:
+    timerStop(T);
+    break;
+    case 4:
+    timerStop(T);
+    break;
+  }
 
-  FILE *f1 = fopen("TimeInQueue.txt", "w");
-    for(int i=0; i<jobsToExecute; ++i){
-      fprintf(f1, "%d,", TotalQueueTime->buffer[i]);
-    }
+
     fclose(f1);
-
-    FILE *f2 = fopen("DriftTime.txt", "w");
-      for(int i=0; i<jobsToExecute; ++i){
-        fprintf(f2, "%d,", DriftTime->buffer[i]);
-      }
-      fclose(f2);
-
-      FILE *f3 = fopen("JobExecTime.txt", "w");
-        for(int i=0; i<jobsToExecute; ++i){
-          fprintf(f3, "%d,", JobExecTime->buffer[i]);
-        }
-        fclose(f3);
-
-        FILE *f4 = fopen("ProdWaitTime.txt", "w");
-          for(int i=0; i<jobsToExecute; ++i){
-            fprintf(f4, "%d,", ProdWaitTime->buffer[i]);
-          }
-          fclose(f4);
-
+    fclose(f2);
+    fclose(f3);
+    fclose(f4);
 
 
 
   queueDelete(fifo);
-  free(T);
+
 
   return 0;
 }
@@ -299,12 +288,11 @@ switch (mode)
 //Producer thread function
 void * producer(void * q) {
 
-
   queue * fifo;
   int i ,tid ;
   Timer *T = (Timer *)q;
   fifo = T->Q ;
-  int randF, randAr;
+  int  randAr;
   double totalDrift = 0;
   struct timeval  timeValue  , prodJobStart , prodJobEnd ;
   double previousInsert , nextInsert ;
@@ -330,12 +318,13 @@ void * producer(void * q) {
 
     //Workfunction object to add at the queue
     workFunction wf;
-    //Randomly choose a function
-    randF = rand() % nOfFunctions;
-    wf.work = functions[randF];
+
     //Randomly choose an argument
     randAr = rand() % nOfArguments;
-    wf.arg = & argu[randAr];
+    wf.arg  = & argu[randAr];
+    wf.work = T->timerFnc;
+
+
 
     //Getting the arrival time at the queue
     gettimeofday(&(arrTime[(fifo->tail)]),NULL);
@@ -345,21 +334,22 @@ void * producer(void * q) {
 
     //Calculate the time taken for a producer to push a job to the queue
     int prodJobADD = (prodJobEnd.tv_sec-prodJobStart.tv_sec)*(int)1e6 + prodJobEnd.tv_usec-prodJobStart.tv_usec;
-    metrixArrayAdd(ProdWaitTime, prodJobADD);
-    printf("Producer push waiting time : %d  \n " , prodJobADD);
+    metrixArrayAdd(f4, prodJobADD);
+    //printf("Producer push waiting time : %d  \n " , prodJobADD);
     pthread_mutex_unlock(fifo -> mut);
     pthread_cond_signal(fifo -> notEmpty);
 
     //Calculate the driftTime
     double driftTime = previousInsert - nextInsert;
-    metrixArrayAdd(DriftTime,driftTime);
+    metrixArrayAdd(f2,driftTime);
     printf("Drift time : %d \n " , (int)driftTime);
-    double sleepTime = T->period - driftTime;
+    double sleepTime = T->period - driftTime/(int)1e3;
     if(sleepTime > 0){
       usleep(sleepTime*(int)1e3);
       //printf("Drift time : %lf \n" , sleepTime);
     }
     else{
+
     //printf("NO FUCKING SLEEP \n");
     }
     //Update time value
@@ -367,6 +357,7 @@ void * producer(void * q) {
     gettimeofday(&timeValue, NULL);
     nextInsert = 1e6*timeValue.tv_sec + timeValue.tv_usec;
   }
+
 
   prodFinished++;
   //Termination condition for the consumers
@@ -413,14 +404,14 @@ void * consumer(void * q) {
     }
 
     //Workfunction object to remove from the queue
-    workFunction wf ;
+    workFunction wf;
     struct timeval leaveTime;
     //Getting the leave time from the queueegettimeofday(&JobExecStart,NULL);
     gettimeofday(&leaveTime,NULL);
     //Calculating the waiting time at the queue
     waitingTime= (leaveTime.tv_sec -(arrTime[fifo->head]).tv_sec) *1e6 + (leaveTime.tv_usec-(arrTime[fifo->head]).tv_usec) ;
-    printf("The waiting time is : %d  \n " , waitingTime);
-    metrixArrayAdd(TotalQueueTime,waitingTime);
+   // printf("The waiting time is : %d  \n " , waitingTime);
+    metrixArrayAdd(f1,waitingTime);
     queueDel(fifo, &wf);
     tempTime += waitingTime;
 
@@ -434,8 +425,8 @@ void * consumer(void * q) {
 
     pthread_mutex_lock(conArg->helperMut);
     int JobDur = (JobExecEnd.tv_sec-JobExecStart.tv_sec)*(int)1e6 + JobExecEnd.tv_usec-JobExecStart.tv_usec;
-    printf("Execution time is  : %d  \n " , JobDur);
-    metrixArrayAdd(JobExecTime,JobDur);
+  //  printf("Execution time is  : %d  \n " , JobDur);
+    metrixArrayAdd(f3,JobDur);
     pthread_mutex_unlock(conArg->helperMut);
 
 
@@ -500,83 +491,89 @@ void queueDel(queue * q, workFunction * out) {
   return;
 }
 
-// // Work function implementations
-// void * circleArea(void * args) {
-//   double x = ( * (int * ) args);
-//   double circleAr = PI * x * x;
-//   //  printf("\nArea of circle is: %lf \n",circleAr );
-//
-// }
-//
-// void * circleCirCumf(void * args) {
-//   double x = ( * (int * ) args);
-//   double circleC = 2 * PI * x;
-//   //     printf("\nCircumference of circle is: %lf \n",circleC);
-// }
+// Work function implementations
 
 void * expo(void * args) {
   double x = ( * (int * ) args);
   double result;
-  for(int i = 0 ; i < nOfExec; i++){
+  for(int i = 0 ;  i < nOfExec ; i++)
   result = exp(x / 180);
 }
-  //    printf("Exponential of %lf = %lf \n", x, result);
 
-}
+
 
 void * sinF(void * args) {
   double x = * (int * ) args;
   double ret, val;
   val = PI / 180;
-  for(int i = 0; i <nOfExec; i++){
+  for(int i = 0; i <nOfExec; i++)
   ret = sin(x * val);
 }
-}
+
 
 void * cosF(void * args) {
   double x = * (int * ) args;
   double ret, val;
   val = PI / 180;
-  for(int i = 0; i<nOfExec ; i++){
+  for(int i = 0; i<nOfExec ; i++)
   ret = cos(x * val);
 }
 
-}
 
 
-Timer *timerInit(int period, int tasksToExecute, int startDelay , queue *queue, void *(*producer)(void *arg),void *(*errorFnc)()){
+//Timer initialization function
+Timer *timerInit(int period, int tasksToExecute, int startDelay , queue *queue, void *(*producer)(void *arg),void *(*errorFnc)(), void * (*timerFnc) (void *)){
     printf("Initializing Timer\n");
     Timer *T = (Timer *) malloc( sizeof(Timer) );
     T->period = period;
     T->tasksToExecute = tasksToExecute;
     T->startDelay = startDelay;
     T->Q = queue;
-    T->producer = producer;
     T->errorFnc = errorFnc;
-    T->startFnc = NULL;
+    T->timerFnc = timerFnc;
+    T->startFnc = producer;
     T->userData = NULL;
+    // na valw tid
 
     return T;
 }
-
+//Function to start the timer
 void start(Timer *T){
- pthread_create(&T->tid, NULL, T->producer, T);
+ pthread_create(&T->tid, NULL, T->startFnc, T);
 
 }
-
+//Function to start the function at a specific time
 void startat(Timer *T, int year, int month, int day, int hour, int minute, int second){
+int delay = 0;
 
+//Get current time using tm struct from <time.h> library
+
+struct tm start;
+start.tm_year = year;
+start.tm_mon = month;
+start.tm_mday = day;
+start.tm_hour = hour;
+start.tm_min = minute;
+start.tm_sec = second;
+
+time_t currentTime = time(NULL);
+delay = (int) difftime(currentTime, mktime(&start));
+
+if(delay > 0){
+  T->startDelay = delay;
+  pthread_create(&T->tid, NULL, T->startFnc, T);
+}
+else{
+  printf("Invalid timestamp \n");
+  exit(0);
+}
 }
 
-
+//Timer free
 void timerStop(Timer *T){
-  free( T->startFnc );
-  free( T->timerFnc );
-  free( T->stopFnc );
-  free( T->errorFnc );
   free( T );
 }
-
+//Timmer error function
 void *error() {
     jobsLostCounter++;
 }
@@ -595,8 +592,8 @@ metrixArray * metrixArrayInit(int n){
   return metr;
 }
 
-void metrixArrayAdd(metrixArray *metr, int value){
+void metrixArrayAdd(FILE *file_to_write , int value){
 
-  metr->buffer[metr->index] = value;
-  metr->index += 1;
+  fprintf(file_to_write, "%d\n", value );
+
 }
